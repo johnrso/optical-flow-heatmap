@@ -4,6 +4,9 @@
 
 import numpy as np
 import cv2 as cv
+from sklearn.preprocessing import normalize
+
+temp = None
 
 def draw_flow(img, flow, step=16):
     h, w = img.shape[:2]
@@ -30,32 +33,56 @@ def draw_hsv(flow):
     return bgr
 
 def draw_heatmap(flow):
-    pass
+    global temp
+
+    h, w = flow.shape[:2]
+    hsv = np.zeros((h, w, 3), np.uint8)
+
+    fx, fy = flow[:,:,0], flow[:,:,1]
+    v = np.sqrt(fx*fx+fy*fy)
+
+    temp = np.add(temp, v)
+    norm = cv.normalize(temp,None,0,255,cv.NORM_MINMAX)
+    norm = np.add(np.full((h, w), 255), -norm)
+
+    hsv[...,0] = norm
+    hsv[...,1] = 255
+    hsv[...,2] = 255
+    bgr = cv.cvtColor(hsv, cv.COLOR_HSV2BGR)
+    return bgr
+
+    # to do:
+    # generate the optical flow model
+    # aggregate the optical flow magnitudes
+    # display them normalized to hsv
+    # clean the image using thresh and stuff
 
 def main():
+    global temp
 
     cam = cv.VideoCapture(0)
     _ret, prev = cam.read()
-
-    weights = np.zeros()
+    temp = np.zeros((prev.shape[0], prev.shape[1]), np.uint8)
     prevgray = cv.cvtColor(prev, cv.COLOR_BGR2GRAY)
-    show_hsv = True
 
     while True:
         _ret, img = cam.read()
         gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
         flow = cv.calcOpticalFlowFarneback(prevgray, gray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+
         prevgray = gray
         cv.imshow('gray', gray)
         cv.imshow('flow HSV', draw_hsv(flow))
+        cv.imshow('heatmap', draw_heatmap(flow))
 
         ch = cv.waitKey(5)
         if ch == 27:
             break
+        elif ch == 32:
+            temp = np.zeros((prev.shape[0], prev.shape[1]), np.uint8)
 
     print('Done')
 
 if __name__ == '__main__':
-    print(__doc__)
     main()
     cv.destroyAllWindows()
