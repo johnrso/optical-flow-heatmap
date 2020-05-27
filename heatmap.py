@@ -1,24 +1,12 @@
 #!/usr/bin/env python
 
-# code taken from opt_flow.py under https://github.com/opencv/opencv/tree/master/samples/python
+# template code taken from opt_flow.py under https://github.com/opencv/opencv/tree/master/samples/python
 
 import numpy as np
-import cv2 as cv
-from sklearn.preprocessing import normalize
+import cv2
 
-temp = None
-
-def draw_flow(img, flow, step=16):
-    h, w = img.shape[:2]
-    y, x = np.mgrid[step/2:h:step, step/2:w:step].reshape(2,-1).astype(int)
-    fx, fy = flow[y,x].T
-    lines = np.vstack([x, y, x+fx, y+fy]).T.reshape(-1, 2, 2)
-    lines = np.int32(lines + 0.5)
-    vis = cv.cvtColor(img, cv.COLOR_GRAY2BGR)
-    cv.polylines(vis, lines, 0, (0, 255, 0))
-    for (x1, y1), (_x2, _y2) in lines:
-        cv.circle(vis, (x1, y1), 1, (0, 255, 0), -1)
-    return vis
+temp = []
+total = []
 
 def draw_hsv(flow):
     h, w = flow.shape[:2]
@@ -29,11 +17,11 @@ def draw_hsv(flow):
     hsv[...,0] = ang*(180/np.pi/2)
     hsv[...,1] = 255
     hsv[...,2] = np.minimum(v*4, 255)
-    bgr = cv.cvtColor(hsv, cv.COLOR_HSV2BGR)
+    bgr = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
     return bgr
 
 def draw_heatmap(flow):
-    global temp
+    global temp, total
 
     h, w = flow.shape[:2]
     hsv = np.zeros((h, w, 3), np.uint8)
@@ -41,48 +29,79 @@ def draw_heatmap(flow):
     fx, fy = flow[:,:,0], flow[:,:,1]
     v = np.sqrt(fx*fx+fy*fy)
 
-    temp = np.add(temp, v)
-    norm = cv.normalize(temp,None,0,255,cv.NORM_MINMAX)
+    hsv[..., 0] = get_norm(v)
+    hsv[..., 1] = 255
+    hsv[..., 2] = 255
+    bgr = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+    return bgr
+
+def draw_heatmap_sum(flow):
+    global total
+
+    h, w = flow.shape[:2]
+    hsv = np.zeros((h, w, 3), np.uint8)
+
+    fx, fy = flow[:,:,0], flow[:,:,1]
+    v = np.sqrt(fx*fx+fy*fy)
+
+    total = np.add(total, v)
+    norm = cv2.normalize(total,None,0,255,cv2.NORM_MINMAX)
     norm = np.add(np.full((h, w), 255), -norm)
 
     hsv[...,0] = norm
     hsv[...,1] = 255
     hsv[...,2] = 255
-    bgr = cv.cvtColor(hsv, cv.COLOR_HSV2BGR)
+    bgr = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
     return bgr
 
-    # to do:
-    # generate the optical flow model
-    # aggregate the optical flow magnitudes
-    # display them normalized to hsv
-    # clean the image using thresh and stuff
+def get_norm(v):
+    global temp, total
+    assert v.shape == temp.shape[:2]
+
+    v = np.maximum(0, v - np.sum(v) /(v.shape[0] * v.shape[1]))
+    temp = np.dstack((temp, v))
+
+    if temp.shape[2] > 30:
+        temp = np.delete(temp, 0, 2)
+    total = np.add(total, v)
+
+    sum = np.sum(temp, axis = 2)
+    norm = cv2.normalize(sum,None,0,255,cv2.NORM_MINMAX)
+
+    return np.full(temp.shape[:2], 255) - norm
 
 def main():
-    global temp
+    global temp, total
 
-    cam = cv.VideoCapture(0)
+    cam = cv2.VideoCapture(0)
     _ret, prev = cam.read()
+
     temp = np.zeros((prev.shape[0], prev.shape[1]), np.uint8)
-    prevgray = cv.cvtColor(prev, cv.COLOR_BGR2GRAY)
+    total = np.zeros((prev.shape[0], prev.shape[1]), np.uint8)
+
+    prevgray = cv2.cvtColor(prev, cv2.COLOR_BGR2GRAY)
 
     while True:
         _ret, img = cam.read()
-        gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
-        flow = cv.calcOpticalFlowFarneback(prevgray, gray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        flow = cv2.calcOpticalFlowFarneback(prevgray, gray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+        heatmap = draw_heatmap(flow)
+        overlay = cv2.addWeighted(img,0.7,heatmap,0.3,0)
 
         prevgray = gray
-        cv.imshow('gray', gray)
-        cv.imshow('flow HSV', draw_hsv(flow))
-        cv.imshow('heatmap', draw_heatmap(flow))
 
-        ch = cv.waitKey(5)
+        cv2.imshow('heatmap', heatmap)
+        cv2.imshow('overlaid', overlay)
+
+        ch = cv2.waitKey(1)
         if ch == 27:
             break
         elif ch == 32:
             temp = np.zeros((prev.shape[0], prev.shape[1]), np.uint8)
 
-    print('Done')
+    print('exiting...')
 
 if __name__ == '__main__':
     main()
-    cv.destroyAllWindows()
+    cv2.destroyAllWindows()
