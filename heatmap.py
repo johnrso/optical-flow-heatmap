@@ -4,6 +4,8 @@
 
 import numpy as np
 import cv2
+import sys
+import getopt
 
 temp = []
 total = []
@@ -70,10 +72,27 @@ def get_norm(v):
 
     return np.full(temp.shape[:2], 255) - norm
 
-def main():
+def main(argv):
     global temp, total
 
-    cam = cv2.VideoCapture(0)
+    inputFile = 0
+    outputFile = None
+    showHeatmap = False
+    try:
+        opts, args = getopt.getopt(argv,"i:o:h",)
+    except getopt.GetoptError:
+        print('Invalid command.')
+        sys.exit(2)
+
+    for opt, arg in opts:
+        if opt == "-i":
+            inputFile = arg
+        elif opt == "-o":
+            outputFile = arg
+        elif opt == "-h":
+            showHeatmap = True
+
+    cam = cv2.VideoCapture(inputFile)
     _ret, prev = cam.read()
 
     temp = np.zeros((prev.shape[0], prev.shape[1]), np.uint8)
@@ -86,12 +105,12 @@ def main():
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
         flow = cv2.calcOpticalFlowFarneback(prevgray, gray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
-        heatmap = draw_heatmap(flow)
+        heatmap = draw_heatmap_sum(flow)
         overlay = cv2.addWeighted(img,0.7,heatmap,0.3,0)
 
         prevgray = gray
-
-        cv2.imshow('heatmap', heatmap)
+        if showHeatmap:
+            cv2.imshow('heatmap', heatmap)
         cv2.imshow('overlaid', overlay)
 
         ch = cv2.waitKey(1)
@@ -103,5 +122,5 @@ def main():
     print('exiting...')
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv[1:])
     cv2.destroyAllWindows()
