@@ -1,5 +1,5 @@
 # optical-flow-heatmap
-Using Open-CV to create a heatmap based on optical flow models. Works best with slow moving objects.
+Using OpenCV to create a heatmap based on optical flow models. Works best with slow moving objects.
 
 ## how it works
 to do
